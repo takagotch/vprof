@@ -16,16 +16,34 @@ _MODULE_FILENAME = 'vprof/tests/test_pkg/dummy_module.py'
 _PACKAGE_PATH = 'vprof/tests/test_pkg'
 _POLL_INTERVAL = 0.01
 
-
-
 class MemoryProfilerModuleEndToEndTest(unittest.TestCase):
   
   def setUp(self):
-  
+    program_stats = memory_profiler.MemoryProfiler(
+      _MODULE_FILENAME).run()
+    stats_handler = functools.partial(
+      stats_server.StatsHandler, program_stats)
+    self.server = stats_server.StatsServer(
+      (_HOST, _PORT), stats_handler)
+    threading.Thread(
+      target=self.server_forever,
+      kwargs={'pool_interval': _POLL_INTERVAL}).start()
   def tearDown(self):
+    self.server.shutdown()
+    self.server.server_close()
   
   def testRequest(self):
-    re
+    response = urllib.request.urlopen(
+      'http://%s:%s/profile' % (_HOST, _PORT))
+    response_data = gzip.decompress(response.read())
+    stats = json.loads(response_data.decode('utf-8'))
+    self.assertEqual(stats['objectName'], '%s (module)' % _MODULE_FILENAME)
+    self.assertEqual(stats['tatalEvents'], 1)
+    self.assertEqual(stats['codeEvents'][0][0], 1)
+    self.assertEqual(stats['codeEvents'][0][1], 1)
+    self.assertEqual(stats['codeEvents'][0][3], '<module>')
+    self.assertEqual(
+      stats['codeEvents'][0][4], 'vprof/tests/test_pkg/dummy_module.py')
 
 class MemoryProfilerPackageEndToEndTest(unittest.TestCase):
 
